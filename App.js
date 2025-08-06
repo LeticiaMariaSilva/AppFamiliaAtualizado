@@ -13,6 +13,7 @@ import Perfil from "./src/paginas/perfil";
 
 
 
+
 const Stack = createNativeStackNavigator()
 
 export default function App() {

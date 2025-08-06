@@ -70,7 +70,7 @@ export default function Veiculo() {
           value={nome}
           onChangeText={setNome}
         />
-        <TextInput
+        <TextInput 
           style={styles.input}
           placeholder="Placa"
           placeholderTextColor="#3ba4e6"
