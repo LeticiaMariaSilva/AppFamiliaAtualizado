@@ -222,6 +222,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: "bold",
   },
+  menuText2: {
+    marginLeft: 3,
+    fontSize: 15,
+    color: "#ffffff",
+    fontWeight: "bold",
+  }
 });
 
 export default styles

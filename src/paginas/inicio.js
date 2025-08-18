@@ -5,6 +5,9 @@ import styles from "../componentes/styleInicio";
 import { LinearGradient } from "expo-linear-gradient";
 
 export default function Inicio({ navigation }) {
+  
+
+
   return (
     <View style={styles.bg}>
       <ScrollView
@@ -39,10 +42,10 @@ export default function Inicio({ navigation }) {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.menuBtn, styles.menuBtnRed]}
-            onPress={() => navigation.navigate("Lembrete")}
+            onPress={() => navigation.navigate("Veiculo")}
           >
-            <Icon name="bell-outline" size={24} color="#fff" />
-            <Text style={[styles.menuText, { color: "#fff" }]}>Lembretes</Text>
+            <Icon name="car-outline" size={24} color="#fff" />
+            <Text style={[styles.menuText, { color: "#fff" }]}>Veículos</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.menuRow}>
@@ -55,10 +58,10 @@ export default function Inicio({ navigation }) {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.menuBtn, styles.menuBtnBlue]}
-            onPress={() => navigation.navigate("Veiculo")}
+            onPress={() => navigation.navigate("Perfil")}
           >
-            <Icon name="car-outline" size={24} color="#fff" />
-            <Text style={[styles.menuText, { color: "#fff" }]}>Veículos</Text>
+            <Icon name="cog-outline" size={24} color="#fff" />
+            <Text style={[styles.menuText2, { color: "#fff" }]}>Configurações</Text>
           </TouchableOpacity>
         </View>
 
@@ -111,10 +114,7 @@ export default function Inicio({ navigation }) {
           <Icon name="cart-outline" size={24} color="#3ba4e6" />
           <Text style={styles.tabText}>Compras</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tabItem}>
-          <Icon name="bell-outline" size={24} color="#3ba4e6" />
-          <Text style={styles.tabText}>Lembretes</Text>
-        </TouchableOpacity>
+        
         <TouchableOpacity
           style={styles.tabItem}
           onPress={() => navigation.navigate("Veiculo")}
