@@ -49,10 +49,11 @@ const styles = StyleSheet.create({
   },
   list: {
     marginHorizontal: 20,
+    marginBottom: 40,
   },
   itemCard: {
     borderRadius: 14,
-    marginBottom: 14,
+    marginBottom: 30,
     padding: 1,
     elevation: 2,
   },
@@ -112,6 +113,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: "bold",
   },
+  headerTitle: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "bold",
+    textAlign: "center"
+    
+  }
 });
 
 export default styles;

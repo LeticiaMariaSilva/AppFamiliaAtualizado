@@ -17,6 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PerfilApi } from "../servicos/api";
 import * as ImagePicker from "expo-image-picker";
 
+
 const membros = [
   { id: "1", nome: "Alex Silva", tipo: "Administrador" },
   { id: "2", nome: "Maria Silva", tipo: "Mãe" },
@@ -33,7 +34,10 @@ export default function Perfil({ route, navigation }) {
   const [notificacoes, setNotificacoes] = useState(true);
   const [senhaAtual, setSenhaAtual] = useState("");
   const [novaSenha, setNovaSenha] = useState("");
-  const [avatar, setAvatar] = useState("https://i.pravatar.cc/150?img=3");
+  const [avatar, setAvatar] = useState(
+    "https://cdn-icons-png.flaticon.com/512/9131/9131529.png"
+  );
+  const [MostrarSenha, setMostrarSenha] = useState(false);
 
   const isFocused = useIsFocused();
 
@@ -61,7 +65,9 @@ export default function Perfil({ route, navigation }) {
 
       console.log("Dados do usuário:", response.data);
       setUsuario(response.data);
-      setAvatar(savedAvatar || "https://i.pravatar.cc/150?img=3");
+      setAvatar(
+        savedAvatar || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png"
+      );
     } catch (error) {
       console.error("Erro ao carregar perfil", {
         message: error.message,
@@ -307,9 +313,7 @@ export default function Perfil({ route, navigation }) {
             {notificacoes ? "Ativadas" : "Desativadas"}
           </Text>
           <Icon
-            name={
-              notificacoes ? "toggle-switch" : "toggle-switch-off-outline"
-            }
+            name={notificacoes ? "toggle-switch" : "toggle-switch-off-outline"}
             size={32}
             color={notificacoes ? "#3ba4e6" : "#888"}
           />
@@ -385,8 +389,19 @@ export default function Perfil({ route, navigation }) {
               value={senhaAtual}
               onChangeText={setSenhaAtual}
               placeholder="Senha Atual"
-              secureTextEntry
+              secureTextEntry={!MostrarSenha}
             />
+            <TouchableOpacity
+              onPress={() => setMostrarSenha(!MostrarSenha)}
+              style={styles.eyeIcon}
+            >
+              <Icon
+                name={MostrarSenha ? "eye" : "visibility-off"}
+                size={22}
+                color="#4a90e2"
+              />
+            </TouchableOpacity>
+
             <TextInput
               style={styles.modalInput}
               value={novaSenha}
@@ -394,6 +409,16 @@ export default function Perfil({ route, navigation }) {
               placeholder="Nova Senha"
               secureTextEntry
             />
+            <TouchableOpacity
+              onPress={() => setMostrarSenha(!MostrarSenha)}
+              style={styles.eyeIcon}
+            >
+              <Icon
+                name={MostrarSenha ? "visibility" : "visibility-off"}
+                size={22}
+                color="#4a90e2"
+              />
+            </TouchableOpacity>
 
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.saveBtn} onPress={salvarSenha}>
