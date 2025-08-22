@@ -11,9 +11,10 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useIsFocused } from "@react-navigation/native";
 import styles from "../componentes/styleVeiculos";
 import { VeiculosApi } from "../servicos/api";
+
+const LS_VEHICLES_KEY = "google_vehicles";
 
 export default function Veiculo({ route, navigation }) {
   const [marca, setMarca] = useState("");
@@ -23,7 +24,15 @@ export default function Veiculo({ route, navigation }) {
   const [isLoading, setIsLoading] = useState(false);
   const [editingVeiculosId, setEditingVeiculoId] = useState(null);
   const [veiculos, setVeiculos] = useState([]);
-  const isFocused = useIsFocused();
+  const [provider, setProvider] = useState("db"); // "db" | "google"
+
+  useEffect(() => {
+    (async () => {
+      const p = (await AsyncStorage.getItem("provider")) || "db";
+      setProvider(p);
+      await carregarVeiculos(p);
+    })();
+  }, []);
 
   useEffect(() => {
     if (route.params?.itensVeiculos) {
@@ -33,66 +42,51 @@ export default function Veiculo({ route, navigation }) {
       setPlaca(route.params.itensVeiculos.placa || "");
       setEditingVeiculoId(route.params.itensVeiculos.id || null);
     } else {
-      setMarca("");
-      setModelo("");
-      setAno("");
-      setPlaca("");
-      setEditingVeiculoId(null);
+      limparForm();
     }
   }, [route.params?.itensVeiculos]);
 
-  useEffect(() => {
-    if (isFocused) {
-      carregarVeiculos();
+  // -------- Helpers (modo Google local) --------
+  async function lsGetVehicles() {
+    const raw = await AsyncStorage.getItem(LS_VEHICLES_KEY);
+    try {
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch {
+      return [];
     }
-  }, [isFocused]);
+  }
 
-  // 🚀 TESTE AUTOMÁTICO DAS ROTAS
-  useEffect(() => {
-    const testarApi = async () => {
-      try {
-        const token = await AsyncStorage.getItem("token");
-        const usuarioId = await AsyncStorage.getItem("userId");
+  async function lsSetVehicles(list) {
+    await AsyncStorage.setItem(LS_VEHICLES_KEY, JSON.stringify(list));
+  }
 
-        console.log("🔑 Token:", token);
-        console.log("👤 UsuarioId:", usuarioId);
+  const nowIso = () => new Date().toISOString();
 
-        // --- TESTE 1: query string ---
-        try {
-          const res1 = await VeiculosApi.get(`/vehicles?usuarioId=${usuarioId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          console.log("✅ TESTE 1 OK (query string):", res1.data);
-        } catch (e) {
-          console.log("❌ TESTE 1 falhou (query string):", e.response?.data || e.message);
-        }
-
-        // --- TESTE 2: rota dinâmica ---
-        try {
-          const res2 = await VeiculosApi.get(`/vehicles/usuario/${usuarioId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          console.log("✅ TESTE 2 OK (rota dinâmica):", res2.data);
-        } catch (e) {
-          console.log("❌ TESTE 2 falhou (rota dinâmica):", e.response?.data || e.message);
-        }
-      } catch (err) {
-        console.log("Erro geral:", err.message);
-      }
-    };
-
-    testarApi();
-  }, []);
-
-  const carregarVeiculos = async () => {
+  // -------- Carregar veículos --------
+  const carregarVeiculos = async (mode = provider) => {
     setIsLoading(true);
     try {
-      const token = await AsyncStorage.getItem("token");
-      const userId = await AsyncStorage.getItem("userId");
+      if (mode === "google") {
+        const local = await lsGetVehicles();
+        local.sort(
+          (a, b) =>
+            new Date(b.updatedAt || b.createdAt || 0) -
+            new Date(a.updatedAt || a.createdAt || 0)
+        );
+        setVeiculos(local);
+        return;
+      }
+
+      // provider === "db" (sem fallback local)
+      const [token, userId] = await Promise.all([
+        AsyncStorage.getItem("token"),
+        AsyncStorage.getItem("userId"),
+      ]);
 
       if (!token || !userId) {
         Alert.alert("Erro", "Faça login novamente.");
-        navigation.navigate("Login");
+        navigation.replace("Login");
         return;
       }
 
@@ -100,47 +94,68 @@ export default function Veiculo({ route, navigation }) {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!Array.isArray(response.data)) {
-        setVeiculos([]);
-        return;
-      }
-
-      const veiculosUsuario = response.data.filter((v) => {
+      const data = Array.isArray(response.data) ? response.data : [];
+      const veiculosUsuario = data.filter((v) => {
         const usuarioId = v.userId ?? v.usuarioId ?? v.ownerId ?? v.user?.id;
-        return String(usuarioId) === userId;
+        return String(usuarioId) === String(userId);
       });
 
       setVeiculos(veiculosUsuario);
     } catch (error) {
-      console.error("Erro ao carregar veículos:", {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data,
-      });
-      Alert.alert(
-        "Erro",
-        error.response?.data?.message || `Não foi possível carregar os veículos.`
-      );
+      console.warn("Erro ao carregar via API:", error?.response?.data || error.message);
+      // mantém modo DB e não migra para local
+      setVeiculos([]);
+      Alert.alert("Erro", "Não foi possível carregar os veículos do servidor.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // -------- Salvar (criar/editar) --------
   const salvarVeiculo = async () => {
     const anoNumero = parseInt(ano, 10);
-
     if (!marca.trim() || !modelo.trim() || !anoNumero || !placa.trim()) {
       Alert.alert("Erro", "Preencha todos os campos.");
       return;
     }
 
     try {
-      const token = await AsyncStorage.getItem("token");
-      const userId = await AsyncStorage.getItem("userId");
+      if (provider === "google") {
+        const current = await lsGetVehicles();
+        if (editingVeiculosId) {
+          const updated = current.map((v) =>
+            v.id === editingVeiculosId
+              ? { ...v, marca, modelo, ano: anoNumero, placa, updatedAt: nowIso() }
+              : v
+          );
+          await lsSetVehicles(updated);
+          Alert.alert("Sucesso", "Veículo atualizado (local).");
+        } else {
+          const novo = {
+            id: `v_${Date.now()}`,
+            marca,
+            modelo,
+            ano: anoNumero,
+            placa,
+            createdAt: nowIso(),
+            updatedAt: nowIso(),
+          };
+          await lsSetVehicles([novo, ...current]);
+          Alert.alert("Sucesso", "Veículo salvo (local).");
+        }
+        limparForm();
+        await carregarVeiculos("google");
+        return;
+      }
 
+      // provider === "db" (sem fallback local)
+      const [token, userId] = await Promise.all([
+        AsyncStorage.getItem("token"),
+        AsyncStorage.getItem("userId"),
+      ]);
       if (!token || !userId) {
         Alert.alert("Erro", "Faça o login novamente.");
-        navigation.navigate("Login");
+        navigation.replace("Login");
         return;
       }
 
@@ -149,7 +164,7 @@ export default function Veiculo({ route, navigation }) {
         modelo,
         ano: anoNumero,
         placa,
-        usuarioId: userId, // ✅ Corrigido para bater com seu backend
+        usuarioId: userId,
       };
 
       if (editingVeiculosId) {
@@ -161,7 +176,7 @@ export default function Veiculo({ route, navigation }) {
         });
         Alert.alert("Sucesso", "Veículo atualizado com sucesso");
       } else {
-        await VeiculosApi.post("/create-vehicle", payload, {
+        await VeiculosApi.post(`/create-vehicle`, payload, {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
@@ -170,52 +185,49 @@ export default function Veiculo({ route, navigation }) {
         Alert.alert("Sucesso", "Veículo salvo com sucesso");
       }
 
-      setMarca("");
-      setModelo("");
-      setAno("");
-      setPlaca("");
-      setEditingVeiculoId(null);
-
-      carregarVeiculos();
+      limparForm();
+      await carregarVeiculos("db");
     } catch (error) {
-      console.error("Erro ao salvar veículo:", {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data,
-      });
-      Alert.alert(
-        "Erro",
-        error.response?.data?.message || `Não foi possível salvar o veículo.`
-      );
+      console.warn("Erro ao salvar via API:", error?.response?.data || error.message);
+      Alert.alert("Erro", "Não foi possível salvar o veículo no servidor.");
+      // não migra para local
     }
   };
 
+  // -------- Excluir --------
   const excluirVeiculo = async (id) => {
     try {
+      if (provider === "google") {
+        const current = await lsGetVehicles();
+        const updated = current.filter((v) => v.id !== id);
+        await lsSetVehicles(updated);
+        setVeiculos(updated);
+        Alert.alert("Sucesso", "Veículo excluído (local).");
+        return;
+      }
+
+      // provider === "db" (sem fallback local)
       const token = await AsyncStorage.getItem("token");
       if (!token) {
         Alert.alert("Erro", "Faça o login novamente.");
-        navigation.navigate("Login");
+        navigation.replace("Login");
         return;
       }
+
       await VeiculosApi.delete(`/delete-vehicle/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      carregarVeiculos();
+
+      await carregarVeiculos("db");
       Alert.alert("Sucesso", "Veículo excluído com sucesso");
     } catch (error) {
-      console.error("Erro ao excluir veículo:", {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data,
-      });
-      Alert.alert(
-        "Erro",
-        error.response?.data?.message || `Não foi possível excluir o veículo.`
-      );
+      console.warn("Erro ao excluir via API:", error?.response?.data || error.message);
+      Alert.alert("Erro", "Não foi possível excluir o veículo no servidor.");
+      // não migra para local
     }
   };
 
+  // -------- Editar / limpar --------
   const editarVeiculo = (item) => {
     setMarca(item.marca);
     setModelo(item.modelo);
@@ -224,11 +236,25 @@ export default function Veiculo({ route, navigation }) {
     setEditingVeiculoId(item.id);
   };
 
-  const navegarParaLembretes = (veiculo) => { navigation.navigate("LembreteDeManutencao", { veiculoSelecionado: veiculo }); };
+  function limparForm() {
+    setMarca("");
+    setModelo("");
+    setAno("");
+    setPlaca("");
+    setEditingVeiculoId(null);
+  }
+
+  const navegarParaLembretes = (veiculo) => {
+    navigation.navigate("LembreteDeManutencao", { veiculoSelecionado: veiculo });
+  };
+
+  // -------- UI --------
   return (
     <View style={styles.bg}>
       <LinearGradient colors={["#3E6A85", "#3E6A85"]} style={styles.header}>
-        <Text style={styles.title}>Veículos</Text>
+        <Text style={styles.title}>
+          Veículos {provider === "google" ? "(Local)" : ""}
+        </Text>
         <Icon name="car-outline" size={32} color="#fff" />
       </LinearGradient>
 
@@ -257,7 +283,7 @@ export default function Veiculo({ route, navigation }) {
         />
         <TextInput
           style={styles.input}
-          placeholder="Placa - ABC1287"
+          placeholder="Placa - ABC1D23"
           placeholderTextColor="#3ba4e6"
           value={placa}
           onChangeText={setPlaca}
@@ -265,15 +291,9 @@ export default function Veiculo({ route, navigation }) {
         <TouchableOpacity
           style={styles.addBtn}
           onPress={salvarVeiculo}
-          accessibilityLabel={
-            editingVeiculosId ? "Atualizar veículo" : "Adicionar veículo"
-          }
+          accessibilityLabel={editingVeiculosId ? "Atualizar veículo" : "Adicionar veículo"}
         >
-          <Icon
-            name={editingVeiculosId ? "update" : "plus"}
-            size={24}
-            color="#fff"
-          />
+          <Icon name={editingVeiculosId ? "update" : "plus"} size={24} color="#fff" />
         </TouchableOpacity>
       </View>
 
@@ -283,42 +303,27 @@ export default function Veiculo({ route, navigation }) {
           <Text style={styles.loadingText}>Carregando veículos...</Text>
         </View>
       ) : veiculos.length === 0 ? (
-        <Text style={styles.emptyText}> Nenhum veículo cadastrado</Text>
+        <Text style={styles.emptyText}>Nenhum veículo cadastrado</Text>
       ) : (
         <FlatList
           data={veiculos}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item) => String(item.id)}
           style={styles.list}
           renderItem={({ item }) => (
-            <LinearGradient
-              colors={["#6EBBEB", "#3E6A85"]}
-              style={styles.itemCard}
-            >
+            <LinearGradient colors={["#6EBBEB", "#3E6A85"]} style={styles.itemCard}>
               <View style={styles.itemRow}>
-                <TouchableOpacity onPress={() => navegarParaLembretes(item)} style={{ marginRight: 10 }} >
-                <Icon
-                  name="car"
-                  size={28}
-                  color="#3E6A85"
-                  style={{ marginRight: 10 }}
-                />
+                <TouchableOpacity onPress={() => navegarParaLembretes(item)} style={{ marginRight: 10 }}>
+                  <Icon name="car" size={28} color="#3E6A85" />
                 </TouchableOpacity>
+
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemTitle}>{item.marca}</Text>
-                  {item.modelo ? (
-                    <Text style={styles.itemInfo}>Modelo: {item.modelo}</Text>
-                  ) : null}
-                  {item.ano ? (
-                    <Text style={styles.itemInfo}>Ano: {item.ano}</Text>
-                  ) : null}
-                  {item.placa ? (
-                    <Text style={styles.itemLembrete}>{item.placa}</Text>
-                  ) : null}
+                  {!!item.modelo && <Text style={styles.itemInfo}>Modelo: {item.modelo}</Text>}
+                  {!!item.ano && <Text style={styles.itemInfo}>Ano: {item.ano}</Text>}
+                  {!!item.placa && <Text style={styles.itemLembrete}>{item.placa}</Text>}
                 </View>
-                <TouchableOpacity
-                  onPress={() => editarVeiculo(item)}
-                  style={{ marginRight: 10 }}
-                >
+
+                <TouchableOpacity onPress={() => editarVeiculo(item)} style={{ marginRight: 10 }}>
                   <Icon name="pencil-outline" size={24} color="#4CAF50" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => excluirVeiculo(item.id)}>
@@ -329,7 +334,6 @@ export default function Veiculo({ route, navigation }) {
           )}
         />
       )}
-
 
       <View style={styles.tabBar}>
         <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate("Inicio")}>

@@ -1,21 +1,28 @@
-import {
-  View,
-  Text,
-  FlatList,
-  Pressable,
-  Image,
-  TouchableOpacity,
-} from "react-native";
+import React from "react";
+import { View, Text, Image, TouchableOpacity } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import style from "../componentes/styleHome";
-import { TextInput } from "react-native-web";
 
-export default function Home({ navigation, route}) {
+export default function Home({ navigation }) {
+  const onStart = async () => {
+    // (Opcional, mas recomendado para evitar pular direto p/ app por sessão antiga)
+    await AsyncStorage.multiRemove([
+      "token",
+      "userId",
+      "provider",
+      "google_profile_override",
+      "userAvatar",
+    ]);
+    navigation.navigate("Login");
+  };
+
   return (
     <View style={style.container}>
       <Image
         source={require("../imagens/imageTasks.png")}
         style={style.imageTasks}
       />
+
       <View style={style.header}>
         <View style={style.TextContainer}>
           <Text style={style.Title}>
@@ -23,11 +30,12 @@ export default function Home({ navigation, route}) {
           </Text>
           <Text style={style.SubTitle}>
             Organizar tarefas familiares melhora a rotina e facilita a
-            coloboração, tornando o dia a dia mais leve e produtivo!
+            colaboração, tornando o dia a dia mais leve e produtivo!
           </Text>
         </View>
+
         <View style={style.startButtonContainer}>
-          <TouchableOpacity style={style.startButton} onPress={() => navigation.navigate("Login")}>
+          <TouchableOpacity style={style.startButton} onPress={onStart}>
             <Text style={style.startButtonText}>COMEÇAR</Text>
           </TouchableOpacity>
         </View>
